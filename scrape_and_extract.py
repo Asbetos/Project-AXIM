@@ -946,6 +946,45 @@ def expand_all_sections(page):
     return verified
 
 
+def _count_marker(text: str, marker: str) -> int:
+    """Count exact marker occurrences in extracted text."""
+    return text.count(marker)
+
+
+def ensure_full_time_mba_view(page) -> bool:
+    """Force the page into the full-time MBA view before extraction.
+
+    Some schools expose multiple program tabs and can default to the wrong
+    program view. This clicks a visible "Full-Time MBA" tab if present and
+    verifies the page text contains the expected full-time ranking section.
+    """
+    full_time_re = re.compile(r"^Full[- ]?Time MBA$", re.IGNORECASE)
+
+    # Try clicking the tab a couple of times in case the first click is eaten
+    # by a delayed overlay or page transition.
+    for attempt in range(3):
+        clicked = _click_first_visible(page, full_time_re)
+        if clicked:
+            time.sleep(2)
+            dismiss_overlay(page)
+            time.sleep(1)
+
+        text = extract_metrics_text(page)
+        if _count_marker(text, "Full-time MBA Ranking Scores") == 1:
+            if clicked:
+                print("  [OK] Confirmed Full-Time MBA view")
+            return True
+
+    text = extract_metrics_text(page)
+    if "Part-time MBA Ranking Scores" in text:
+        print("  [X] Page remained on Part-time MBA view")
+        return False
+
+    # Some schools may not expose a clickable tab but still already be in the
+    # right view. Accept the page if the part-time ranking block is absent.
+    return True
+
+
 # ---------------------------------------------------------------------------
 # TARGETED TEXT EXTRACTION
 # ---------------------------------------------------------------------------
@@ -1100,6 +1139,12 @@ def scrape_school(page, url: str, school_name: str) -> str | None:
     # Strip again after scroll (lazy-loaded ads may have appeared)
     strip_ad_elements(page)
 
+    # Step 1b: force the program view to Full-Time MBA when the page exposes
+    # multiple program tabs.
+    print("  Checking Full-Time MBA view...")
+    if not ensure_full_time_mba_view(page):
+        return None
+
     # Step 2: Expand all 7 sections
     print("  Expanding sections...")
     sections_expanded = expand_all_sections(page)
@@ -1113,6 +1158,13 @@ def scrape_school(page, url: str, school_name: str) -> str | None:
 
     # Step 4: Extract only the metrics region
     text = extract_metrics_text(page)
+
+    full_time_marker_count = _count_marker(text, "Full-time MBA Ranking Scores")
+    if full_time_marker_count != 1:
+        print(
+            f"  [X] Expected exactly one Full-time MBA Ranking Scores block; found {full_time_marker_count}"
+        )
+        return None
 
     if len(text.strip()) < 500:
         print(f"  [!] Very little text extracted ({len(text)} chars)")

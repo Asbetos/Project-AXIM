@@ -1,4 +1,4 @@
-# US News MBA Data Extractor
+# P
 
 This project automates collection and structuring of US News business school profile data.
 
