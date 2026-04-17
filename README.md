@@ -1,4 +1,4 @@
-# P
+# Project AXIM - Automated eXtraction of Institutional Metrics
 
 This project automates collection and structuring of US News business school profile data.
 
